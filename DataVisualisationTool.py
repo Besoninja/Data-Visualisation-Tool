@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
-import openpyxl as px
 
-# Filtering function (Step 1)
+# Filtering function
 def filter_data(df):
     st.sidebar.header("Filter Your Data")
-    
+
+    # Store filtered and removed entries
     filtered_df = df.copy()
-    removed_df = pd.DataFrame()  # DataFrame to store removed entries
+    removed_df = pd.DataFrame()  # Starts empty
 
     # Let the user select a column to filter
     column = st.sidebar.selectbox("Select a column to filter", df.columns)
@@ -23,21 +23,19 @@ def filter_data(df):
             max_value=max_val,
             value=(min_val, max_val)
         )
+        # Apply filter
         removed_df = filtered_df[~((filtered_df[column] >= user_min) & (filtered_df[column] <= user_max))]
         filtered_df = filtered_df[(filtered_df[column] >= user_min) & (filtered_df[column] <= user_max)]
-    
+
     elif pd.api.types.is_categorical_dtype(df[column]) or df[column].dtype == object:
         # Categorical filters: Multiselect
         unique_vals = df[column].dropna().unique()
-        if len(unique_vals) > 5:
-            # Add a search box for large numbers of unique values
-            search_term = st.sidebar.text_input(f"Search in {column}")
-            unique_vals = [val for val in unique_vals if search_term.lower() in str(val).lower()]
         selected_vals = st.sidebar.multiselect(
             f"Filter {column}",
             options=unique_vals,
             default=unique_vals
         )
+        # Apply filter
         removed_df = filtered_df[~filtered_df[column].isin(selected_vals)]
         filtered_df = filtered_df[filtered_df[column].isin(selected_vals)]
 
@@ -48,14 +46,24 @@ def filter_data(df):
             removed_df = filtered_df[~filtered_df[column].str.contains(text_filter, case=False, na=False)]
             filtered_df = filtered_df[filtered_df[column].str.contains(text_filter, case=False, na=False)]
 
-    # Display removed entries below the filter
+    # Display Removed Entries
     if not removed_df.empty:
         st.sidebar.markdown("### Removed Entries")
-        st.sidebar.dataframe(removed_df)
+        removed_vals = st.sidebar.multiselect(
+            f"Re-add removed {column} entries",
+            options=removed_df[column].unique(),
+        )
 
+        # Move selected entries back to the filtered list
+        if removed_vals:
+            re_added = removed_df[removed_df[column].isin(removed_vals)]
+            filtered_df = pd.concat([filtered_df, re_added])
+            removed_df = removed_df[~removed_df[column].isin(removed_vals)]
+
+    # Display filtered entries
     return filtered_df
-    
-# Main function (Step 2)
+
+# Main function
 def main():
     st.title("Data Visualization Tool - 2D Tables")
     
@@ -64,18 +72,12 @@ def main():
 
     if uploaded_file is not None:
         try:
-            # Handle CSV and Excel files
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
             elif uploaded_file.name.endswith('.xlsx'):
-                # Load all sheet names
                 excel_file = pd.ExcelFile(uploaded_file)
                 sheet_names = excel_file.sheet_names
-
-                # Add a dropdown to select a sheet
                 selected_sheet = st.sidebar.selectbox("Select a sheet", sheet_names)
-
-                # Load the selected sheet into a DataFrame
                 df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
             else:
                 st.error("Unsupported file format!")
