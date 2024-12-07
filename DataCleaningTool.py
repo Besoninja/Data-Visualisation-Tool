@@ -9,6 +9,7 @@ def filter_data(df):
 
     # Let the user select a column to filter
     column = st.sidebar.selectbox("Select a column to filter", df.columns)
+    st.sidebar.write(f"**Data Type:** {df[column].dtype}")  # Show the data type
 
     # Determine the column's data type
     if pd.api.types.is_numeric_dtype(df[column]):
@@ -25,6 +26,10 @@ def filter_data(df):
     elif pd.api.types.is_categorical_dtype(df[column]) or df[column].dtype == object:
         # Categorical filters: Multiselect
         unique_vals = df[column].dropna().unique()
+        if len(unique_vals) > 5:
+            # Add a search box for large numbers of unique values
+            search_term = st.sidebar.text_input(f"Search in {column}")
+            unique_vals = [val for val in unique_vals if search_term.lower() in str(val).lower()]
         selected_vals = st.sidebar.multiselect(
             f"Filter {column}",
             options=unique_vals,
@@ -39,8 +44,8 @@ def filter_data(df):
             filtered_df = filtered_df[filtered_df[column].str.contains(text_filter, case=False, na=False)]
 
     return filtered_df
-
-# Main function (Step 2 - updated version)
+    
+# Main function (Step 2)
 def main():
     st.title("Data Visualization Tool - 2D Tables")
     
