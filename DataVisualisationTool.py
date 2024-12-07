@@ -46,21 +46,25 @@ def filter_data(df):
             removed_df = filtered_df[~filtered_df[column].str.contains(text_filter, case=False, na=False)]
             filtered_df = filtered_df[filtered_df[column].str.contains(text_filter, case=False, na=False)]
 
-    # Display Removed Entries
+    # Show Removed Entries in the Main App Area
     if not removed_df.empty:
-        st.sidebar.markdown("### Removed Entries")
-        removed_vals = st.sidebar.multiselect(
-            f"Re-add removed {column} entries",
+        st.subheader("Removed Entries")
+        st.dataframe(removed_df)
+
+        # Allow users to re-add entries
+        st.markdown(f"### Re-add Entries to Filtered Data (Column: {column})")
+        re_add_vals = st.multiselect(
+            "Select entries to re-add:",
             options=removed_df[column].unique(),
         )
 
-        # Move selected entries back to the filtered list
-        if removed_vals:
-            re_added = removed_df[removed_df[column].isin(removed_vals)]
+        # Re-add selected entries
+        if re_add_vals:
+            re_added = removed_df[removed_df[column].isin(re_add_vals)]
             filtered_df = pd.concat([filtered_df, re_added])
-            removed_df = removed_df[~removed_df[column].isin(removed_vals)]
+            removed_df = removed_df[~removed_df[column].isin(re_add_vals)]
 
-    # Display filtered entries
+    # Return updated filtered DataFrame
     return filtered_df
 
 # Main function
