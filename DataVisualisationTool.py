@@ -6,6 +6,7 @@ def filter_data(df):
     st.sidebar.header("Filter Your Data")
     
     filtered_df = df.copy()
+    removed_df = pd.DataFrame()  # DataFrame to store removed entries
 
     # Let the user select a column to filter
     column = st.sidebar.selectbox("Select a column to filter", df.columns)
@@ -21,7 +22,8 @@ def filter_data(df):
             max_value=max_val,
             value=(min_val, max_val)
         )
-        filtered_df = filtered_df[(df[column] >= user_min) & (df[column] <= user_max)]
+        removed_df = filtered_df[~((filtered_df[column] >= user_min) & (filtered_df[column] <= user_max))]
+        filtered_df = filtered_df[(filtered_df[column] >= user_min) & (filtered_df[column] <= user_max)]
     
     elif pd.api.types.is_categorical_dtype(df[column]) or df[column].dtype == object:
         # Categorical filters: Multiselect
@@ -35,13 +37,20 @@ def filter_data(df):
             options=unique_vals,
             default=unique_vals
         )
+        removed_df = filtered_df[~filtered_df[column].isin(selected_vals)]
         filtered_df = filtered_df[filtered_df[column].isin(selected_vals)]
 
     elif pd.api.types.is_string_dtype(df[column]):
         # Text filters: Substring search
         text_filter = st.sidebar.text_input(f"Search in {column}")
         if text_filter:
+            removed_df = filtered_df[~filtered_df[column].str.contains(text_filter, case=False, na=False)]
             filtered_df = filtered_df[filtered_df[column].str.contains(text_filter, case=False, na=False)]
+
+    # Display removed entries below the filter
+    if not removed_df.empty:
+        st.sidebar.markdown("### Removed Entries")
+        st.sidebar.dataframe(removed_df)
 
     return filtered_df
     
