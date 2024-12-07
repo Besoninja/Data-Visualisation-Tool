@@ -54,16 +54,28 @@ def main():
 
     if uploaded_file is not None:
         try:
+            # Handle CSV and Excel files
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
             elif uploaded_file.name.endswith('.xlsx'):
-                df = pd.read_excel(uploaded_file)
+                # Load all sheet names
+                excel_file = pd.ExcelFile(uploaded_file)
+                sheet_names = excel_file.sheet_names
+
+                # Add a dropdown to select a sheet
+                selected_sheet = st.sidebar.selectbox("Select a sheet", sheet_names)
+
+                # Load the selected sheet into a DataFrame
+                df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
             else:
                 st.error("Unsupported file format!")
                 return
             
-            st.subheader("Data Preview")
-            st.dataframe(df.head())
+            # Show data preview with data types
+            st.subheader("Data Preview with Data Types")
+            data_preview = df.head().copy()
+            data_preview.loc['Data Type'] = df.dtypes
+            st.dataframe(data_preview)
 
             # Apply filters
             filtered_df = filter_data(df)
