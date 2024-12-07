@@ -1,17 +1,54 @@
 import streamlit as st
 import pandas as pd
 
+# Filtering function (Step 1)
+def filter_data(df):
+    st.sidebar.header("Filter Your Data")
+    
+    filtered_df = df.copy()
+
+    # Let the user select a column to filter
+    column = st.sidebar.selectbox("Select a column to filter", df.columns)
+
+    # Determine the column's data type
+    if pd.api.types.is_numeric_dtype(df[column]):
+        # Numeric filters: Range slider
+        min_val, max_val = int(df[column].min()), int(df[column].max())
+        user_min, user_max = st.sidebar.slider(
+            f"Filter {column}",
+            min_value=min_val,
+            max_value=max_val,
+            value=(min_val, max_val)
+        )
+        filtered_df = filtered_df[(df[column] >= user_min) & (df[column] <= user_max)]
+    
+    elif pd.api.types.is_categorical_dtype(df[column]) or df[column].dtype == object:
+        # Categorical filters: Multiselect
+        unique_vals = df[column].dropna().unique()
+        selected_vals = st.sidebar.multiselect(
+            f"Filter {column}",
+            options=unique_vals,
+            default=unique_vals
+        )
+        filtered_df = filtered_df[filtered_df[column].isin(selected_vals)]
+
+    elif pd.api.types.is_string_dtype(df[column]):
+        # Text filters: Substring search
+        text_filter = st.sidebar.text_input(f"Search in {column}")
+        if text_filter:
+            filtered_df = filtered_df[filtered_df[column].str.contains(text_filter, case=False, na=False)]
+
+    return filtered_df
+
+# Main function (Step 2 - updated version)
 def main():
     st.title("Data Visualization Tool - 2D Tables")
     
-    # Sidebar for file upload
     st.sidebar.header("Upload Your Data")
     uploaded_file = st.sidebar.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx"])
 
-    # If a file is uploaded
     if uploaded_file is not None:
         try:
-            # Handle CSV or Excel files
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
             elif uploaded_file.name.endswith('.xlsx'):
@@ -20,18 +57,23 @@ def main():
                 st.error("Unsupported file format!")
                 return
             
-            # Display the uploaded data
             st.subheader("Data Preview")
             st.dataframe(df.head())
 
-            # Display basic statistics
-            st.subheader("Basic Statistics")
-            st.write(df.describe())
-        
+            # Apply filters
+            filtered_df = filter_data(df)
+            
+            st.subheader("Filtered Data")
+            st.dataframe(filtered_df)
+
+            st.subheader("Basic Statistics (Filtered Data)")
+            st.write(filtered_df.describe())
+
         except Exception as e:
             st.error(f"Error loading file: {e}")
     else:
         st.info("Please upload a CSV or Excel file to start.")
 
+# Run the app
 if __name__ == "__main__":
     main()
