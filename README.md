@@ -19,7 +19,7 @@ Local Installation:
 Alternatively, you can run the app locally
 
 Clone this repository:
-git clone https://github.com/besoninja/Data-Visualisaton-Tool.git
+git clone https://github.com/Besoninja/Data-Visualisation-Tool.git
 
 Navigate to the project directory:
 cd repo-name
