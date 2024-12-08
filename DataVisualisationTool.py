@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
 import io
 
-def initialize_session_state():
-    """Initialize session state variables for persistent selections"""
+def initialise_session_state():
+    """Initialise session state variables for persistent selections"""
     if 'selected_columns' not in st.session_state:
         st.session_state.selected_columns = []
     if 'selected_viz_type' not in st.session_state:
@@ -70,56 +67,37 @@ def filter_data(df):
 
     return filtered_df
 
-def create_visualization(df, viz_type, selected_cols):
-    """Create visualization based on type and selected columns"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
+def create_visualisation(df, viz_type, selected_cols):
+    """Create visualisation based on type and selected columns"""
     try:
         if viz_type == "Correlation Matrix":
             numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(df[col])]
             if len(numeric_cols) > 1:
-                sns.heatmap(df[numeric_cols].corr(), annot=True, cmap='coolwarm', ax=ax)
-                plt.xticks(rotation=45)
-                plt.yticks(rotation=0)
+                corr_data = df[numeric_cols].corr()
+                st.dataframe(corr_data.style.background_gradient(cmap='coolwarm'))
         
-        elif viz_type == "Distribution":
-            for col in selected_cols:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    sns.histplot(data=df, x=col, kde=True, ax=ax)
-        
-        elif viz_type == "Box Plot":
+        elif viz_type == "Line Chart":
             if len(selected_cols) >= 2:
-                sns.boxplot(data=df, x=selected_cols[0], y=selected_cols[1], ax=ax)
-            else:
-                sns.boxplot(data=df, y=selected_cols[0], ax=ax)
+                st.line_chart(df, x=selected_cols[0], y=selected_cols[1:])
+        
+        elif viz_type == "Area Chart":
+            if len(selected_cols) >= 2:
+                st.area_chart(df, x=selected_cols[0], y=selected_cols[1:])
+        
+        elif viz_type == "Bar Chart":
+            if len(selected_cols) >= 2:
+                st.bar_chart(df, x=selected_cols[0], y=selected_cols[1:])
         
         elif viz_type == "Scatter Plot":
             if len(selected_cols) >= 2:
-                sns.scatterplot(data=df, x=selected_cols[0], y=selected_cols[1], ax=ax)
-        
-        elif viz_type == "Line Plot":
-            if len(selected_cols) >= 2:
-                sns.lineplot(data=df, x=selected_cols[0], y=selected_cols[1], ax=ax)
-        
-        elif viz_type == "Bar Plot":
-            if len(selected_cols) >= 2:
-                sns.barplot(data=df, x=selected_cols[0], y=selected_cols[1], ax=ax)
-        
-        elif viz_type == "Violin Plot":
-            if len(selected_cols) >= 2:
-                sns.violinplot(data=df, x=selected_cols[0], y=selected_cols[1], ax=ax)
-            else:
-                sns.violinplot(data=df, y=selected_cols[0], ax=ax)
-        
-        plt.xticks(rotation=45)
-        return fig
+                st.scatter_chart(df, x=selected_cols[0], y=selected_cols[1:])
+
     except Exception as e:
-        st.error(f"Error creating visualization: {str(e)}")
-        return None
+        st.error(f"Error creating visualisation: {str(e)}")
 
 def main():
-    st.title("Data Visualization Tool - 2D Tables")
-    initialize_session_state()
+    st.title("Data Visualisation Tool - 2D Tables")
+    initialise_session_state()
 
     st.sidebar.header("Upload Your Data")
     uploaded_file = st.sidebar.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx"])
@@ -135,7 +113,7 @@ def main():
                 df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
 
             # Show data preview
-            with st.expander("Data Preview", expanded=True):
+            with st.expander("Data Overview", expanded=True):
                 st.write("Below are the first 5 rows of your data:")
                 st.dataframe(df.head())
                 
@@ -150,8 +128,8 @@ def main():
             st.session_state.numeric_cols = filtered_df.select_dtypes(include=[np.number]).columns.tolist()
             st.session_state.categorical_cols = filtered_df.select_dtypes(include=['object', 'category']).columns.tolist()
 
-            # Create tabs for different visualizations
-            viz_tabs = ["Basic Stats", "Distributions", "Relationships", "Comparisons"]
+            # Create tabs for different visualisations
+            viz_tabs = ["Basic Stats", "Time Series", "Relationships", "Distributions"]
             tabs = st.tabs(viz_tabs)
 
             # Column selection (persists across tabs)
@@ -160,7 +138,7 @@ def main():
 
             with st.sidebar:
                 st.session_state.selected_columns = st.multiselect(
-                    "Select columns for visualization",
+                    "Select columns for visualisation",
                     options=filtered_df.columns.tolist(),
                     default=st.session_state.selected_columns
                 )
@@ -169,37 +147,31 @@ def main():
             with tabs[0]:
                 st.header("Basic Statistics")
                 if st.session_state.numeric_cols:
-                    st.write(filtered_df[st.session_state.numeric_cols].describe())
+                    st.dataframe(filtered_df[st.session_state.numeric_cols].describe())
 
-            # Distributions Tab
+            # Time Series Tab
             with tabs[1]:
-                st.header("Distribution Analysis")
-                viz_types = ["Distribution", "Box Plot", "Violin Plot"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="dist_viz")
+                st.header("Time Series Analysis")
+                viz_types = ["Line Chart", "Area Chart"]
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="time_viz")
                 if st.session_state.selected_columns:
-                    fig = create_visualization(filtered_df, selected_viz, st.session_state.selected_columns)
-                    if fig:
-                        st.pyplot(fig)
+                    create_visualisation(filtered_df, selected_viz, st.session_state.selected_columns)
 
             # Relationships Tab
             with tabs[2]:
                 st.header("Relationship Analysis")
-                viz_types = ["Scatter Plot", "Line Plot", "Correlation Matrix"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="rel_viz")
+                viz_types = ["Scatter Plot", "Correlation Matrix"]
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="rel_viz")
                 if st.session_state.selected_columns:
-                    fig = create_visualization(filtered_df, selected_viz, st.session_state.selected_columns)
-                    if fig:
-                        st.pyplot(fig)
+                    create_visualisation(filtered_df, selected_viz, st.session_state.selected_columns)
 
-            # Comparisons Tab
+            # Distributions Tab
             with tabs[3]:
-                st.header("Comparison Analysis")
-                viz_types = ["Bar Plot", "Box Plot", "Violin Plot"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="comp_viz")
+                st.header("Distribution Analysis")
+                viz_types = ["Bar Chart"]
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="dist_viz")
                 if st.session_state.selected_columns:
-                    fig = create_visualization(filtered_df, selected_viz, st.session_state.selected_columns)
-                    if fig:
-                        st.pyplot(fig)
+                    create_visualisation(filtered_df, selected_viz, st.session_state.selected_columns)
 
             # Export functionality
             if st.button("Download Filtered Data"):
