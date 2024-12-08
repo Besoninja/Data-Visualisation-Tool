@@ -333,4 +333,19 @@ def main():
                 elif export_format == "Excel":
                     buffer = io.BytesIO()
                     df.to_excel(buffer, index=False)
-                    st.sidebar.download_button("Download Excel", buffer.
+                    st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
+                elif export_format == "JSON":
+                    json_str = df.to_json(orient='records')
+                    st.sidebar.download_button("Download JSON", json_str, "data_export.json")
+                elif export_format == "Parquet":
+                    buffer = io.BytesIO()
+                    df.to_parquet(buffer)
+                    st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
+        
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+    else:
+        st.info("Please upload a file to start. Supported formats: " + ", ".join(SUPPORTED_FILE_TYPES))
+
+if __name__ == "__main__":
+    main()
