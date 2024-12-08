@@ -1,7 +1,10 @@
 streamlit
 pandas
-openpyxl
 numpy
-matplotlib
-seaborn
 plotly
+scipy
+seaborn
+matplotlib
+pillow
+pyarrow
+sqlite3-api
