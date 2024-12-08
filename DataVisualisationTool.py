@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import io
 
 def filter_data(df):
     st.sidebar.header("Filter Your Data")
