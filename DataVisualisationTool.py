@@ -92,7 +92,7 @@ def clean_data(df):
     return df
 
     """Create enhanced visualisations with customisation options"""
-    def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
+def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
     try:
         if customise_options is None:
             customise_options = {}
