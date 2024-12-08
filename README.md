@@ -1,33 +1,26 @@
-# Data Visualisation Tool
-Description:
-A Streamlit-based app for visualising 2D tables and questionnaire results.
+# Data Visualization Tool
 
-Features
-- Visualise and interact with 2D tables.
-- Analyse questionnaire data easily.
+An interactive data visualization tool built with Streamlit that allows users to explore and analyze 2D tabular data.
 
-Try it Out
-You can run the tool directly on Streamlit Cloud:
-<Link to Streamlit page>
+## Features
+- Upload CSV or Excel files
+- Interactive data filtering
+- Exploratory Data Analysis (EDA)
+- Correlation analysis
+- Distribution plots
+- Categorical data analysis
+- Export filtered data
 
-How to Use:
-1) Visit the app using the link above.
-2) Upload your dataset or questionnaire results in supported formats (e.g., CSV).
-3) Explore the visualisations and insights interactively.
+## Installation
+1. Clone this repository
+2. Install requirements:
+```pip install -r requirements.txt```
 
-Local Installation:
-Alternatively, you can run the app locally
+## Usage
+Run the app locally:
+```streamlit run DataVisualisationTool.py```
 
-Clone this repository:
-git clone https://github.com/Besoninja/Data-Visualisation-Tool.git
+Or visit the deployed version at: https://datavisualisationtool.streamlit.app/
 
-Navigate to the project directory:
-cd repo-name
-
-Install dependencies:
-pip install -r requirements.txt
-
-Run the app:
-streamlit run app.py
-
-Feedback and contributions are welcome! Feel free to submit issues or pull requests.
+## Sample Data
+Upload any CSV or Excel file with numerical and categorical columns to start exploring your data.
