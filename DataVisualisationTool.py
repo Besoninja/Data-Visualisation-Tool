@@ -17,9 +17,10 @@ from pathlib import Path
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "json", "parquet", "sqlite"]
 CACHE_DIR = Path("./cache")
 MAX_MEMORY_USAGE = 1024 * 1024 * 1024  # 1GB
+MAX_ROWS = 100000  # Maximum rows for analysis
 
 def initialise_session_state():
-    """Initialise session state variables for persistent selections and theme"""
+    """Initialise session state variables for persistent selections"""
     defaults = {
         'selected_columns': [],
         'selected_viz_type': None,
@@ -46,6 +47,8 @@ def show_tutorial():
             2. **Explore Tabs**: Use different tabs for various analysis types
             3. **Customise**: Modify charts using the options below each visualisation
             4. **Export**: Download your visualisations or processed data
+            
+            Note: For large datasets, the tool will automatically use sampling to maintain performance.
             """)
             if st.button("Got it! Don't show again"):
                 st.session_state.tutorial_shown = True
@@ -53,10 +56,20 @@ def show_tutorial():
 def check_memory_usage(df):
     """Monitor memory usage and warn if approaching limits"""
     memory_usage = df.memory_usage(deep=True).sum()
-    if memory_usage > MAX_MEMORY_USAGE:
-        st.warning("⚠️ Large dataset detected. Consider using data sampling to improve performance.")
+    memory_mb = memory_usage / (1024 * 1024)  # Convert to MB
+    
+    if memory_mb > 1000:  # If more than 1GB
+        st.warning(f"⚠️ Large dataset detected ({memory_mb:.0f}MB). Using sampling to improve performance.")
         return False
     return True
+
+def check_data_size(df):
+    """Check and handle large datasets"""
+    if len(df) > MAX_ROWS:
+        sample_size = MAX_ROWS / len(df)
+        st.warning(f"Dataset is too large ({len(df):,} rows). Using a {sample_size:.1%} sample for analysis.")
+        return df.sample(n=MAX_ROWS, random_state=42)
+    return df
 
 def clean_data(df):
     """Provide data cleaning options"""
@@ -91,8 +104,8 @@ def clean_data(df):
     
     return df
 
-    """Create enhanced visualisations with customisation options"""
 def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
+    """Create enhanced visualisations with customisation options"""
     try:
         if customise_options is None:
             customise_options = {}
@@ -102,65 +115,68 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
         color_theme = customise_options.get('color_theme', 'viridis')
         show_legend = customise_options.get('show_legend', True)
         
-        # Simplify color theme handling
+        # Map color theme names to actual Plotly color sequences
         color_sequences = {
-            'viridis': 'Viridis',
-            'plasma': 'Plasma',
-            'inferno': 'Inferno',
-            'magma': 'Magma'
+            'viridis': px.colors.sequential.Viridis[5],
+            'plasma': px.colors.sequential.Plasma[5],
+            'inferno': px.colors.sequential.Inferno[5],
+            'magma': px.colors.sequential.Magma[5]
         }
         
-        selected_color = color_sequences.get(color_theme, 'Viridis')
+        selected_color = color_sequences.get(color_theme, px.colors.sequential.Viridis[5])
+        
+        # Sample data if too large for visualisation
+        viz_df = df.copy()
+        if len(viz_df) > 10000:  # Limit for visualisations
+            viz_df = viz_df.sample(n=10000, random_state=42)
+            st.info(f"Showing visualisation for a sample of 10,000 rows")
         
         if viz_type == "Correlation Matrix":
-            numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(df[col])]
+            numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(viz_df[col])]
             if len(numeric_cols) > 1:
-                corr_data = df[numeric_cols].corr()
+                corr_data = viz_df[numeric_cols].corr()
                 fig = px.imshow(corr_data,
                               title=title or "Correlation Matrix",
-                              color_continuous_scale=selected_color)
+                              color_continuous_scale=color_theme)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Box Plot":
             if len(selected_cols) >= 2:
-                fig = px.box(df, x=selected_cols[0], y=selected_cols[1],
-                           title=title or "Box Plot",
-                           color_discrete_sequence=[px.colors.sequential.Viridis[4]])
+                fig = px.box(viz_df, x=selected_cols[0], y=selected_cols[1],
+                           title=title or "Box Plot")
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Violin Plot":
             if len(selected_cols) >= 2:
-                fig = px.violin(df, x=selected_cols[0], y=selected_cols[1],
-                              title=title or "Violin Plot",
-                              color_discrete_sequence=[px.colors.sequential.Viridis[4]])
+                fig = px.violin(viz_df, x=selected_cols[0], y=selected_cols[1],
+                              title=title or "Violin Plot")
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Histogram":
             if selected_cols:
-                fig = px.histogram(df, x=selected_cols[0],
-                                 title=title or "Histogram",
-                                 color_discrete_sequence=[px.colors.sequential.Viridis[4]])
+                fig = px.histogram(viz_df, x=selected_cols[0],
+                                 title=title or "Histogram")
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
             if len(selected_cols) >= 2:
                 if viz_type == "Line Chart":
-                    fig = px.line(df, x=selected_cols[0], y=selected_cols[1:],
-                                title=title or "Line Chart",
-                                color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig = px.line(viz_df, x=selected_cols[0], y=selected_cols[1:],
+                                title=title or "Line Chart")
                 elif viz_type == "Area Chart":
-                    fig = px.area(df, x=selected_cols[0], y=selected_cols[1:],
-                                title=title or "Area Chart",
-                                color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig = px.area(viz_df, x=selected_cols[0], y=selected_cols[1:],
+                                title=title or "Area Chart")
                 elif viz_type == "Bar Chart":
-                    fig = px.bar(df, x=selected_cols[0], y=selected_cols[1:],
-                                title=title or "Bar Chart",
-                                color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig = px.bar(viz_df, x=selected_cols[0], y=selected_cols[1:],
+                                title=title or "Bar Chart")
                 else:  # Scatter Plot
-                    fig = px.scatter(df, x=selected_cols[0], y=selected_cols[1],
-                                   title=title or "Scatter Plot",
-                                   color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig = px.scatter(viz_df, x=selected_cols[0], y=selected_cols[1],
+                                   title=title or "Scatter Plot")
                 
+                fig.update_traces(marker_color=selected_color)
                 fig.update_layout(showlegend=show_legend)
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -190,14 +206,18 @@ def perform_statistical_analysis(df, selected_cols):
             correlation = df[col1].corr(df[col2])
             st.write(f"Pearson Correlation between {col1} and {col2}: {correlation:.3f}")
             
-            # T-test
-            t_stat, p_value = stats.ttest_ind(df[col1].dropna(), df[col2].dropna())
-            st.write(f"Independent T-test p-value: {p_value:.3f}")
+            # For large datasets, use sampling for statistical tests
+            sample_size = min(5000, len(df))
+            df_sample = df.sample(n=sample_size, random_state=42)
             
-            # Additional tests
-            st.write("### Normality Test (Shapiro-Wilk)")
+            # T-test on sample
+            t_stat, p_value = stats.ttest_ind(df_sample[col1].dropna(), df_sample[col2].dropna())
+            st.write(f"Independent T-test p-value (on {sample_size:,} sample): {p_value:.3f}")
+            
+            # Normality test on sample
+            st.write(f"### Normality Test (Shapiro-Wilk) on {sample_size:,} sample")
             for col in [col1, col2]:
-                stat, p = stats.shapiro(df[col].dropna())
+                stat, p = stats.shapiro(df_sample[col].dropna())
                 st.write(f"{col}: p-value = {p:.3f}")
             
         elif pd.api.types.is_categorical_dtype(df[col1]) or pd.api.types.is_categorical_dtype(df[col2]):
@@ -219,8 +239,8 @@ def main():
         else:
             st.session_state.theme = 'light'
         st.markdown("---")
-        st.markdown("[📚 Documentation](https://github.com/yourusername/data-vis-tool/wiki)")
-        st.markdown("[💡 Report an Issue](https://github.com/yourusername/data-vis-tool/issues)")
+        st.markdown("[📚 Documentation](https://github.com/Besoninja/Data-Visualisation-Tool/wiki)")
+        st.markdown("[💡 Report an Issue](https://github.com/Besoninja/Data-Visualisation-Tool/issues)")
     
     st.title("Enhanced Data Visualisation Tool")
     show_tutorial()
@@ -250,10 +270,9 @@ def main():
                 df = pd.read_sql_query(f"SELECT * FROM {selected_table}", conn)
                 conn.close()
             
-            # Check memory usage
+            # Check memory usage and sample if necessary
             if not check_memory_usage(df):
-                sample_size = st.sidebar.slider("Select sample size (%)", 1, 100, 10)
-                df = df.sample(frac=sample_size/100)
+                df = check_data_size(df)
             
             # Clean data
             df = clean_data(df)
@@ -340,20 +359,23 @@ def main():
             export_format = st.sidebar.selectbox("Export Format", ["CSV", "Excel", "JSON", "Parquet"])
             
             if st.sidebar.button("Export Data"):
-                if export_format == "CSV":
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.sidebar.download_button("Download CSV", csv, "data_export.csv", "text/csv")
-                elif export_format == "Excel":
-                    buffer = io.BytesIO()
-                    df.to_excel(buffer, index=False)
-                    st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
-                elif export_format == "JSON":
-                    json_str = df.to_json(orient='records')
-                    st.sidebar.download_button("Download JSON", json_str, "data_export.json")
-                elif export_format == "Parquet":
-                    buffer = io.BytesIO()
-                    df.to_parquet(buffer)
-                    st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
+                try:
+                    if export_format == "CSV":
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.sidebar.download_button("Download CSV", csv, "data_export.csv", "text/csv")
+                    elif export_format == "Excel":
+                        buffer = io.BytesIO()
+                        df.to_excel(buffer, index=False)
+                        st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
+                    elif export_format == "JSON":
+                        json_str = df.to_json(orient='records')
+                        st.sidebar.download_button("Download JSON", json_str, "data_export.json")
+                    elif export_format == "Parquet":
+                        buffer = io.BytesIO()
+                        df.to_parquet(buffer)
+                        st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
+                except Exception as e:
+                    st.sidebar.error(f"Error exporting data: {str(e)}")
         
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
