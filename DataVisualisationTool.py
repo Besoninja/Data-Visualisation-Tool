@@ -91,8 +91,8 @@ def clean_data(df):
     
     return df
 
-def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
     """Create enhanced visualisations with customisation options"""
+    def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
     try:
         if customise_options is None:
             customise_options = {}
@@ -101,6 +101,16 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
         title = customise_options.get('title', '')
         color_theme = customise_options.get('color_theme', 'viridis')
         show_legend = customise_options.get('show_legend', True)
+        
+        # Map color theme names to actual Plotly color sequences
+        color_sequences = {
+            'viridis': px.colors.sequential.Viridis[5],
+            'plasma': px.colors.sequential.Plasma[5],
+            'inferno': px.colors.sequential.Inferno[5],
+            'magma': px.colors.sequential.Magma[5]
+        }
+        
+        selected_color = color_sequences.get(color_theme, px.colors.sequential.Viridis[5])
         
         if viz_type == "Correlation Matrix":
             numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(df[col])]
@@ -115,21 +125,21 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
             if len(selected_cols) >= 2:
                 fig = px.box(df, x=selected_cols[0], y=selected_cols[1],
                            title=title or "Box Plot")
-                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Violin Plot":
             if len(selected_cols) >= 2:
                 fig = px.violin(df, x=selected_cols[0], y=selected_cols[1],
                               title=title or "Violin Plot")
-                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Histogram":
             if selected_cols:
                 fig = px.histogram(df, x=selected_cols[0],
                                  title=title or "Histogram")
-                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
+                fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
@@ -147,7 +157,7 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
                     fig = px.scatter(df, x=selected_cols[0], y=selected_cols[1],
                                    title=title or "Scatter Plot")
                 
-                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
+                fig.update_traces(marker_color=selected_color)
                 fig.update_layout(showlegend=show_legend)
                 st.plotly_chart(fig, use_container_width=True)
         
