@@ -18,8 +18,8 @@ SUPPORTED_FILE_TYPES = ["csv", "xlsx", "json", "parquet", "sqlite"]
 CACHE_DIR = Path("./cache")
 MAX_MEMORY_USAGE = 1024 * 1024 * 1024  # 1GB
 
-def initialize_session_state():
-    """Initialize session state variables for persistent selections and theme"""
+def initialise_session_state():
+    """Initialise session state variables for persistent selections and theme"""
     defaults = {
         'selected_columns': [],
         'selected_viz_type': None,
@@ -40,14 +40,12 @@ def show_tutorial():
     if not st.session_state.tutorial_shown:
         with st.expander("📚 Getting Started Guide", expanded=True):
             st.markdown("""
-            # Welcome to the Enhanced Data Visualization Tool!
+            # Welcome to the Enhanced Data Visualisation Tool!
             
             1. **Upload Data**: Start by uploading your data file in the sidebar
             2. **Explore Tabs**: Use different tabs for various analysis types
-            3. **Customize**: Modify charts using the options below each visualization
-            4. **Export**: Download your visualizations or processed data
-            
-            Need help? Check the documentation link in the sidebar!
+            3. **Customise**: Modify charts using the options below each visualisation
+            4. **Export**: Download your visualisations or processed data
             """)
             if st.button("Got it! Don't show again"):
                 st.session_state.tutorial_shown = True
@@ -93,16 +91,16 @@ def clean_data(df):
     
     return df
 
-def create_advanced_visualization(df, viz_type, selected_cols, customize_options=None):
-    """Create enhanced visualizations with customization options"""
+def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
+    """Create enhanced visualisations with customisation options"""
     try:
-        if customize_options is None:
-            customize_options = {}
+        if customise_options is None:
+            customise_options = {}
         
-        # Get default customization options
-        title = customize_options.get('title', '')
-        color_theme = customize_options.get('color_theme', 'viridis')
-        show_legend = customize_options.get('show_legend', True)
+        # Get default customisation options
+        title = customise_options.get('title', '')
+        color_theme = customise_options.get('color_theme', 'viridis')
+        show_legend = customise_options.get('show_legend', True)
         
         if viz_type == "Correlation Matrix":
             numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(df[col])]
@@ -116,22 +114,22 @@ def create_advanced_visualization(df, viz_type, selected_cols, customize_options
         elif viz_type == "Box Plot":
             if len(selected_cols) >= 2:
                 fig = px.box(df, x=selected_cols[0], y=selected_cols[1],
-                           title=title or "Box Plot",
-                           color=selected_cols[0] if len(selected_cols) > 2 else None)
+                           title=title or "Box Plot")
+                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Violin Plot":
             if len(selected_cols) >= 2:
                 fig = px.violin(df, x=selected_cols[0], y=selected_cols[1],
-                              title=title or "Violin Plot",
-                              color=selected_cols[0] if len(selected_cols) > 2 else None)
+                              title=title or "Violin Plot")
+                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type == "Histogram":
             if selected_cols:
                 fig = px.histogram(df, x=selected_cols[0],
-                                 title=title or "Histogram",
-                                 color=selected_cols[1] if len(selected_cols) > 1 else None)
+                                 title=title or "Histogram")
+                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
                 st.plotly_chart(fig, use_container_width=True)
         
         elif viz_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
@@ -147,51 +145,71 @@ def create_advanced_visualization(df, viz_type, selected_cols, customize_options
                                 title=title or "Bar Chart")
                 else:  # Scatter Plot
                     fig = px.scatter(df, x=selected_cols[0], y=selected_cols[1],
-                                   title=title or "Scatter Plot",
-                                   color=selected_cols[2] if len(selected_cols) > 2 else None)
+                                   title=title or "Scatter Plot")
                 
+                fig.update_traces(marker_color=px.colors.sequential[color_theme][5])
                 fig.update_layout(showlegend=show_legend)
                 st.plotly_chart(fig, use_container_width=True)
         
-        # Add download button for the visualization
-        if st.button("Download Visualization"):
-            fig.write_image("visualization.png")
-            with open("visualization.png", "rb") as file:
+        # Add download button for the visualisation
+        if st.button("Download Visualisation"):
+            fig.write_image("visualisation.png")
+            with open("visualisation.png", "rb") as file:
                 btn = st.download_button(
                     label="Download PNG",
                     data=file,
-                    file_name="visualization.png",
+                    file_name="visualisation.png",
                     mime="image/png"
                 )
     
     except Exception as e:
-        st.error(f"Error creating visualization: {str(e)}")
+        st.error(f"Error creating visualisation: {str(e)}")
 
 def perform_statistical_analysis(df, selected_cols):
     """Perform basic statistical analysis"""
     if len(selected_cols) >= 2:
+        st.subheader("Two-Variable Analysis")
         col1, col2 = selected_cols[:2]
+        
+        # Show analysis based on data types
         if pd.api.types.is_numeric_dtype(df[col1]) and pd.api.types.is_numeric_dtype(df[col2]):
             # Correlation analysis
             correlation = df[col1].corr(df[col2])
-            st.write(f"Correlation coefficient between {col1} and {col2}: {correlation:.3f}")
+            st.write(f"Pearson Correlation between {col1} and {col2}: {correlation:.3f}")
             
             # T-test
             t_stat, p_value = stats.ttest_ind(df[col1].dropna(), df[col2].dropna())
-            st.write(f"T-test p-value: {p_value:.3f}")
+            st.write(f"Independent T-test p-value: {p_value:.3f}")
+            
+            # Additional tests
+            st.write("### Normality Test (Shapiro-Wilk)")
+            for col in [col1, col2]:
+                stat, p = stats.shapiro(df[col].dropna())
+                st.write(f"{col}: p-value = {p:.3f}")
+            
+        elif pd.api.types.is_categorical_dtype(df[col1]) or pd.api.types.is_categorical_dtype(df[col2]):
+            # Chi-square test for categorical data
+            contingency = pd.crosstab(df[col1], df[col2])
+            chi2, p_value, dof, expected = stats.chi2_contingency(contingency)
+            st.write(f"Chi-square test p-value: {p_value:.3f}")
+            st.write("Contingency Table:")
+            st.dataframe(contingency)
 
 def main():
-    st.set_page_config(page_title="Enhanced Data Visualization Tool", layout="wide")
-    initialize_session_state()
+    st.set_page_config(page_title="Enhanced Data Visualisation Tool", layout="wide")
+    initialise_session_state()
     
-    # Theme toggle
+    # Theme toggle and documentation links
     with st.sidebar:
         if st.checkbox("Dark Mode", key="dark_mode"):
             st.session_state.theme = 'dark'
         else:
             st.session_state.theme = 'light'
+        st.markdown("---")
+        st.markdown("[📚 Documentation](https://github.com/yourusername/data-vis-tool/wiki)")
+        st.markdown("[💡 Report an Issue](https://github.com/yourusername/data-vis-tool/issues)")
     
-    st.title("Enhanced Data Visualization Tool")
+    st.title("Enhanced Data Visualisation Tool")
     show_tutorial()
     
     # File upload with extended support
@@ -254,17 +272,17 @@ def main():
             # Column selection
             with st.sidebar:
                 st.session_state.selected_columns = st.multiselect(
-                    "Select columns for visualization",
+                    "Select columns for visualisation",
                     options=df.columns.tolist(),
                     default=st.session_state.numeric_cols[:2] if st.session_state.numeric_cols else []
                 )
             
-            # Visualization customization
+            # Visualisation customisation
             with st.sidebar:
-                st.subheader("Customize Visualization")
-                customize_options = {
+                st.subheader("Customise Visualisation")
+                customise_options = {
                     'title': st.text_input("Chart Title"),
-                    'color_theme': st.selectbox("Color Theme", ['viridis', 'plasma', 'inferno', 'magma']),
+                    'color_theme': st.selectbox("Colour Theme", ['viridis', 'plasma', 'inferno', 'magma']),
                     'show_legend': st.checkbox("Show Legend", value=True)
                 }
             
@@ -278,25 +296,25 @@ def main():
             with tabs[1]:
                 st.header("Time Series Analysis")
                 viz_types = ["Line Chart", "Area Chart"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="time_viz")
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="time_viz")
                 if st.session_state.selected_columns:
-                    create_advanced_visualization(df, selected_viz, st.session_state.selected_columns, customize_options)
+                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
             
             # Relationships Tab
             with tabs[2]:
                 st.header("Relationship Analysis")
                 viz_types = ["Scatter Plot", "Correlation Matrix", "Box Plot", "Violin Plot"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="rel_viz")
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="rel_viz")
                 if st.session_state.selected_columns:
-                    create_advanced_visualization(df, selected_viz, st.session_state.selected_columns, customize_options)
+                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
             
             # Distributions Tab
             with tabs[3]:
                 st.header("Distribution Analysis")
                 viz_types = ["Histogram", "Bar Chart"]
-                selected_viz = st.selectbox("Select visualization type", viz_types, key="dist_viz")
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="dist_viz")
                 if st.session_state.selected_columns:
-                    create_advanced_visualization(df, selected_viz, st.session_state.selected_columns, customize_options)
+                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
             
             # Statistical Tests Tab
             with tabs[4]:
@@ -315,19 +333,4 @@ def main():
                 elif export_format == "Excel":
                     buffer = io.BytesIO()
                     df.to_excel(buffer, index=False)
-                    st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
-                elif export_format == "JSON":
-                    json_str = df.to_json(orient='records')
-                    st.sidebar.download_button("Download JSON", json_str, "data_export.json")
-                elif export_format == "Parquet":
-                    buffer = io.BytesIO()
-                    df.to_parquet(buffer)
-                    st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
-        
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-    else:
-        st.info("Please upload a file to start. Supported formats: " + ", ".join(SUPPORTED_FILE_TYPES))
-
-if __name__ == "__main__":
-    main()
+                    st.sidebar.download_button("Download Excel", buffer.
