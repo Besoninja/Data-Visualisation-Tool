@@ -93,24 +93,24 @@ def clean_data(df):
 
     """Create enhanced visualisations with customisation options"""
     def create_advanced_visualisation(df, viz_type, selected_cols, customise_options=None):
-    try:
-        if customise_options is None:
-            customise_options = {}
+        try:
+            if customise_options is None:
+                customise_options = {}
+            
+            # Get default customisation options
+            title = customise_options.get('title', '')
+            color_theme = customise_options.get('color_theme', 'viridis')
+            show_legend = customise_options.get('show_legend', True)
+            
+            # Map color theme names to actual Plotly color sequences
+            color_sequences = {
+                'viridis': px.colors.sequential.Viridis[5],
+                'plasma': px.colors.sequential.Plasma[5],
+                'inferno': px.colors.sequential.Inferno[5],
+                'magma': px.colors.sequential.Magma[5]
+            }
         
-        # Get default customisation options
-        title = customise_options.get('title', '')
-        color_theme = customise_options.get('color_theme', 'viridis')
-        show_legend = customise_options.get('show_legend', True)
-        
-        # Map color theme names to actual Plotly color sequences
-        color_sequences = {
-            'viridis': px.colors.sequential.Viridis[5],
-            'plasma': px.colors.sequential.Plasma[5],
-            'inferno': px.colors.sequential.Inferno[5],
-            'magma': px.colors.sequential.Magma[5]
-        }
-        
-        selected_color = color_sequences.get(color_theme, px.colors.sequential.Viridis[5])
+            selected_color = color_sequences.get(color_theme, px.colors.sequential.Viridis[5])
         
         if viz_type == "Correlation Matrix":
             numeric_cols = [col for col in selected_cols if pd.api.types.is_numeric_dtype(df[col])]
