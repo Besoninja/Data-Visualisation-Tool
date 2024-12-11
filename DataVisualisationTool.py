@@ -110,12 +110,10 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
         if customise_options is None:
             customise_options = {}
         
-        # Get default customisation options
         title = customise_options.get('title', '')
         color_theme = customise_options.get('color_theme', 'viridis')
         show_legend = customise_options.get('show_legend', True)
         
-        # Map color theme names to actual Plotly color sequences
         color_sequences = {
             'viridis': px.colors.sequential.Viridis[5],
             'plasma': px.colors.sequential.Plasma[5],
@@ -127,7 +125,7 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
         
         # Sample data if too large for visualisation
         viz_df = df.copy()
-        if len(viz_df) > 10000:  # Limit for visualisations
+        if len(viz_df) > 10000:
             viz_df = viz_df.sample(n=10000, random_state=42)
             st.info(f"Showing visualisation for a sample of 10,000 rows")
         
@@ -161,15 +159,9 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
                 fig.update_traces(marker_color=selected_color)
                 st.plotly_chart(fig, use_container_width=True)
         
-        elif viz_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
+        elif viz_type in ["Bar Chart", "Scatter Plot"]:
             if len(selected_cols) >= 2:
-                if viz_type == "Line Chart":
-                    fig = px.line(viz_df, x=selected_cols[0], y=selected_cols[1:],
-                                title=title or "Line Chart")
-                elif viz_type == "Area Chart":
-                    fig = px.area(viz_df, x=selected_cols[0], y=selected_cols[1:],
-                                title=title or "Area Chart")
-                elif viz_type == "Bar Chart":
+                if viz_type == "Bar Chart":
                     fig = px.bar(viz_df, x=selected_cols[0], y=selected_cols[1:],
                                 title=title or "Bar Chart")
                 else:  # Scatter Plot
@@ -195,38 +187,75 @@ def create_advanced_visualisation(df, viz_type, selected_cols, customise_options
         st.error(f"Error creating visualisation: {str(e)}")
 
 def perform_statistical_analysis(df, selected_cols):
-    """Perform basic statistical analysis"""
+    """Perform statistical analysis with proper hypothesis testing"""
     if len(selected_cols) >= 2:
         st.subheader("Two-Variable Analysis")
         col1, col2 = selected_cols[:2]
         
-        # Show analysis based on data types
+        # Analysis based on data types
         if pd.api.types.is_numeric_dtype(df[col1]) and pd.api.types.is_numeric_dtype(df[col2]):
-            # Correlation analysis
-            correlation = df[col1].corr(df[col2])
+            # Correlation analysis with significance test
+            correlation, p_value_corr = stats.pearsonr(df[col1].dropna(), df[col2].dropna())
             st.write(f"Pearson Correlation between {col1} and {col2}: {correlation:.3f}")
+            st.write(f"Correlation p-value: {p_value_corr:.3f}")
             
-            # For large datasets, use sampling for statistical tests
+            # Sample size determination for statistical tests
             sample_size = min(5000, len(df))
             df_sample = df.sample(n=sample_size, random_state=42)
             
-            # T-test on sample
-            t_stat, p_value = stats.ttest_ind(df_sample[col1].dropna(), df_sample[col2].dropna())
-            st.write(f"Independent T-test p-value (on {sample_size:,} sample): {p_value:.3f}")
+            # Independent t-test with proper assumptions check
+            st.write("### Independent T-test Analysis")
+            # Check for normality first
+            _, p_norm1 = stats.shapiro(df_sample[col1].dropna())
+            _, p_norm2 = stats.shapiro(df_sample[col2].dropna())
             
-            # Normality test on sample
-            st.write(f"### Normality Test (Shapiro-Wilk) on {sample_size:,} sample")
-            for col in [col1, col2]:
-                stat, p = stats.shapiro(df_sample[col].dropna())
-                st.write(f"{col}: p-value = {p:.3f}")
+            if p_norm1 < 0.05 or p_norm2 < 0.05:
+                st.write("Data is not normally distributed. Using Mann-Whitney U test instead of t-test.")
+                stat, p_value = stats.mannwhitneyu(df_sample[col1].dropna(), 
+                                                 df_sample[col2].dropna(),
+                                                 alternative='two-sided')
+                test_name = "Mann-Whitney U test"
+            else:
+                # Check for equal variances
+                _, p_var = stats.levene(df_sample[col1].dropna(), df_sample[col2].dropna())
+                equal_var = p_var >= 0.05
+                
+                stat, p_value = stats.ttest_ind(df_sample[col1].dropna(), 
+                                              df_sample[col2].dropna(),
+                                              equal_var=equal_var)
+                test_name = "Independent t-test"
+            
+            st.write(f"{test_name} p-value: {p_value:.3f}")
+            
+            # Effect size calculation (Cohen's d)
+            d = (df_sample[col1].mean() - df_sample[col2].mean()) / np.sqrt(
+                ((df_sample[col1].std() ** 2 + df_sample[col2].std() ** 2) / 2))
+            st.write(f"Effect size (Cohen's d): {d:.3f}")
             
         elif pd.api.types.is_categorical_dtype(df[col1]) or pd.api.types.is_categorical_dtype(df[col2]):
             # Chi-square test for categorical data
+            st.write("### Chi-square Test of Independence")
             contingency = pd.crosstab(df[col1], df[col2])
+            
+            # Check minimum expected frequency assumption
             chi2, p_value, dof, expected = stats.chi2_contingency(contingency)
-            st.write(f"Chi-square test p-value: {p_value:.3f}")
+            
+            if (expected < 5).any():
+                st.warning("Warning: Some expected frequencies are less than 5. Consider Fisher's exact test.")
+                if contingency.shape == (2, 2):  # Only for 2x2 tables
+                    _, p_value = stats.fisher_exact(contingency)
+                    st.write(f"Fisher's exact test p-value: {p_value:.3f}")
+            else:
+                st.write(f"Chi-square test p-value: {p_value:.3f}")
+            
             st.write("Contingency Table:")
             st.dataframe(contingency)
+            
+            # Cramer's V for effect size
+            n = contingency.sum().sum()
+            min_dim = min(contingency.shape) - 1
+            cramer_v = np.sqrt(chi2 / (n * min_dim))
+            st.write(f"Effect size (Cramer's V): {cramer_v:.3f}")
 
 def main():
     st.set_page_config(page_title="Enhanced Data Visualisation Tool", layout="wide")
@@ -294,93 +323,3 @@ def main():
             
             # Create tabs
             tabs = st.tabs([
-                "Basic Stats",
-                "Time Series",
-                "Relationships",
-                "Distributions",
-                "Statistical Tests"
-            ])
-            
-            # Column selection
-            with st.sidebar:
-                st.session_state.selected_columns = st.multiselect(
-                    "Select columns for visualisation",
-                    options=df.columns.tolist(),
-                    default=st.session_state.numeric_cols[:2] if st.session_state.numeric_cols else []
-                )
-            
-            # Visualisation customisation
-            with st.sidebar:
-                st.subheader("Customise Visualisation")
-                customise_options = {
-                    'title': st.text_input("Chart Title"),
-                    'color_theme': st.selectbox("Colour Theme", ['viridis', 'plasma', 'inferno', 'magma']),
-                    'show_legend': st.checkbox("Show Legend", value=True)
-                }
-            
-            # Basic Stats Tab
-            with tabs[0]:
-                st.header("Basic Statistics")
-                if st.session_state.numeric_cols:
-                    st.dataframe(df[st.session_state.numeric_cols].describe())
-            
-            # Time Series Tab
-            with tabs[1]:
-                st.header("Time Series Analysis")
-                viz_types = ["Line Chart", "Area Chart"]
-                selected_viz = st.selectbox("Select visualisation type", viz_types, key="time_viz")
-                if st.session_state.selected_columns:
-                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
-            
-            # Relationships Tab
-            with tabs[2]:
-                st.header("Relationship Analysis")
-                viz_types = ["Scatter Plot", "Correlation Matrix", "Box Plot", "Violin Plot"]
-                selected_viz = st.selectbox("Select visualisation type", viz_types, key="rel_viz")
-                if st.session_state.selected_columns:
-                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
-            
-            # Distributions Tab
-            with tabs[3]:
-                st.header("Distribution Analysis")
-                viz_types = ["Histogram", "Bar Chart"]
-                selected_viz = st.selectbox("Select visualisation type", viz_types, key="dist_viz")
-                if st.session_state.selected_columns:
-                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
-            
-            # Statistical Tests Tab
-            with tabs[4]:
-                st.header("Statistical Analysis")
-                if st.session_state.selected_columns:
-                    perform_statistical_analysis(df, st.session_state.selected_columns)
-            
-            # Export functionality
-            st.sidebar.header("Export Options")
-            export_format = st.sidebar.selectbox("Export Format", ["CSV", "Excel", "JSON", "Parquet"])
-            
-            if st.sidebar.button("Export Data"):
-                try:
-                    if export_format == "CSV":
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.sidebar.download_button("Download CSV", csv, "data_export.csv", "text/csv")
-                    elif export_format == "Excel":
-                        buffer = io.BytesIO()
-                        df.to_excel(buffer, index=False)
-                        st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
-                    elif export_format == "JSON":
-                        json_str = df.to_json(orient='records')
-                        st.sidebar.download_button("Download JSON", json_str, "data_export.json")
-                    elif export_format == "Parquet":
-                        buffer = io.BytesIO()
-                        df.to_parquet(buffer)
-                        st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
-                except Exception as e:
-                    st.sidebar.error(f"Error exporting data: {str(e)}")
-        
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-    else:
-        st.info("Please upload a file to start. Supported formats: " + ", ".join(SUPPORTED_FILE_TYPES))
-
-if __name__ == "__main__":
-    main()
