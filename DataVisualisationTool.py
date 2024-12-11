@@ -44,8 +44,9 @@ def show_tutorial():
         with st.expander("📚 Getting Started Guide", expanded=True):
             st.markdown("""
             # Welcome to My Data Visualisation Tool!
-            This tool allows users to analyse their data through an interactive interface. 
-            It offering features like basic statistical analysis, relationship visualisation, distribution analysis, and advanced statistical testing - all while automatically handling data cleaning, large dataset sampling, and providing multiple export options for both the data and visualisations.
+            This tool allows users to visualise their data through an interactive interface. 
+            
+            It offers basic statistical analysis, relationship visualisation, distribution analysis, and advanced statistical testing.
 
             To get started:
             
