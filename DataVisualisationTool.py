@@ -323,3 +323,84 @@ def main():
             
             # Create tabs
             tabs = st.tabs([
+                "Basic Stats",
+                "Relationships",
+                "Distributions",
+                "Statistical Tests"
+            ])
+            
+            # Column selection
+            with st.sidebar:
+                st.session_state.selected_columns = st.multiselect(
+                    "Select columns for visualisation",
+                    options=df.columns.tolist(),
+                    default=st.session_state.numeric_cols[:2] if st.session_state.numeric_cols else []
+                )
+            
+            # Visualisation customisation
+            with st.sidebar:
+                st.subheader("Customise Visualisation")
+                customise_options = {
+                    'title': st.text_input("Chart Title"),
+                    'color_theme': st.selectbox("Colour Theme", ['viridis', 'plasma', 'inferno', 'magma']),
+                    'show_legend': st.checkbox("Show Legend", value=True)
+                }
+            
+            # Basic Stats Tab
+            with tabs[0]:
+                st.header("Basic Statistics")
+                if st.session_state.numeric_cols:
+                    st.dataframe(df[st.session_state.numeric_cols].describe())
+            
+            # Relationships Tab
+            with tabs[1]:
+                st.header("Relationship Analysis")
+                viz_types = ["Scatter Plot", "Correlation Matrix", "Box Plot", "Violin Plot"]
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="rel_viz")
+                if st.session_state.selected_columns:
+                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
+            
+            # Distributions Tab
+            with tabs[2]:
+                st.header("Distribution Analysis")
+                viz_types = ["Histogram", "Bar Chart"]
+                selected_viz = st.selectbox("Select visualisation type", viz_types, key="dist_viz")
+                if st.session_state.selected_columns:
+                    create_advanced_visualisation(df, selected_viz, st.session_state.selected_columns, customise_options)
+            
+            # Statistical Tests Tab
+            with tabs[3]:
+                st.header("Statistical Analysis")
+                if st.session_state.selected_columns:
+                    perform_statistical_analysis(df, st.session_state.selected_columns)
+            
+            # Export functionality
+            st.sidebar.header("Export Options")
+            export_format = st.sidebar.selectbox("Export Format", ["CSV", "Excel", "JSON", "Parquet"])
+            
+            if st.sidebar.button("Export Data"):
+                try:
+                    if export_format == "CSV":
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.sidebar.download_button("Download CSV", csv, "data_export.csv", "text/csv")
+                    elif export_format == "Excel":
+                        buffer = io.BytesIO()
+                        df.to_excel(buffer, index=False)
+                        st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
+                    elif export_format == "JSON":
+                        json_str = df.to_json(orient='records')
+                        st.sidebar.download_button("Download JSON", json_str, "data_export.json")
+                    elif export_format == "Parquet":
+                        buffer = io.BytesIO()
+                        df.to_parquet(buffer)
+                        st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
+                except Exception as e:
+                    st.sidebar.error(f"Error exporting data: {str(e)}")
+        
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+    else:
+        st.info("Please upload a file to start. Supported formats: " + ", ".join(SUPPORTED_FILE_TYPES))
+
+if __name__ == "__main__":
+    main()
