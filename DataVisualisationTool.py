@@ -1,3 +1,4 @@
+# import modules
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,6 +20,7 @@ CACHE_DIR = Path("./cache")
 MAX_MEMORY_USAGE = 1024 * 1024 * 1024  # 1GB
 MAX_ROWS = 100000  # Maximum rows for analysis
 
+# Create function for the outline of the page
 def initialise_session_state():
     """Initialise session state variables for persistent selections"""
     defaults = {
@@ -41,7 +43,10 @@ def show_tutorial():
     if not st.session_state.tutorial_shown:
         with st.expander("📚 Getting Started Guide", expanded=True):
             st.markdown("""
-            # Welcome to the Enhanced Data Visualisation Tool!
+            # Welcome to My Data Visualisation Tool!
+            This tool allows users to upload and analyse their data through an interactive interface. It offering features like basic statistical analysis, relationship visualisation (through scatter plots, correlation matrices, and box plots), distribution analysis, and advanced statistical testing - all while automatically handling data cleaning, large dataset sampling, and providing multiple export options for both the data and visualisations.
+
+            To get started:
             
             1. **Upload Data**: Start by uploading your data file in the sidebar
             2. **Explore Tabs**: Use different tabs for various analysis types
