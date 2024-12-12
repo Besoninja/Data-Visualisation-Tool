@@ -12,6 +12,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import io
 from scipy import stats
 import seaborn as sns
@@ -26,7 +27,6 @@ from pathlib import Path
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "json", "parquet", "sqlite"]
 CACHE_DIR = Path("./cache")
 MAX_MEMORY_USAGE = 1024 * 1024 * 1024  # 1GB
-MAX_SHAPIRO_SIZE = 5000  # Maximum number of samples for Shapiro test to avoid errors on large data
 
 def initialise_session_state():
     """
@@ -49,7 +49,6 @@ def initialise_session_state():
         'categorical_columns': [],
         'datetime_columns': [],
         'theme': 'light',
-        # 'cached_data' could be used for caching data transformations if needed.
         'cached_data': None,
         'tutorial_shown': False
     }
@@ -135,9 +134,7 @@ def apply_data_cleaning_options(dataframe):
     elif missing_value_strategy == "Fill with median":
         dataframe = dataframe.fillna(dataframe.median(numeric_only=True))
     elif missing_value_strategy == "Fill with mode":
-        mode_vals = dataframe.mode()
-        if not mode_vals.empty:
-            dataframe = dataframe.fillna(mode_vals.iloc[0])
+        dataframe = dataframe.fillna(dataframe.mode().iloc[0])  # mode() returns a DataFrame
 
     # Remove outliers using z-score thresholding if selected
     if st.sidebar.checkbox("Remove outliers"):
@@ -151,62 +148,12 @@ def apply_data_cleaning_options(dataframe):
     if st.sidebar.checkbox("Remove duplicate rows"):
         dataframe = dataframe.drop_duplicates()
     
-    # If dataset becomes empty after cleaning, warn user
-    if dataframe.empty:
-        st.warning("The dataset is now empty after cleaning. Please adjust your cleaning options.")
-    
     return dataframe
-
-def is_viz_compatible(dataframe, viz_type, selected_columns):
-    """
-    Check if the chosen visualisation type is compatible with the selected columns.
-    If not compatible, returns False and displays a warning.
-
-    Parameters:
-        dataframe (pd.DataFrame): The dataset.
-        viz_type (str): Chosen visualisation type.
-        selected_columns (list): Columns chosen for the visualisation.
-
-    Returns:
-        bool: True if compatible, False otherwise.
-
-    Example usage:
-        if is_viz_compatible(df, "Line Chart", ["date_col", "value_col"]):
-            create_visualisation(df, "Line Chart", ["date_col", "value_col"])
-    """
-    if viz_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
-        if len(selected_columns) < 2:
-            st.warning(f"For a {viz_type}, please select at least one x-axis column and one y-axis column.")
-            return False
-        # For time series (Line/Area), having a datetime or at least a sortable numeric column as x is helpful
-        # but not strictly required. We'll just advise the user if no datetime column:
-        if viz_type in ["Line Chart", "Area Chart"] and not any(
-            pd.api.types.is_datetime64_dtype(dataframe[col]) for col in selected_columns
-        ):
-            st.info("Consider using a datetime column for time series visuals.")
-    
-    if viz_type == "Correlation Matrix":
-        numeric_cols = [col for col in selected_columns if pd.api.types.is_numeric_dtype(dataframe[col])]
-        if len(numeric_cols) < 2:
-            st.warning("For a Correlation Matrix, please select at least two numeric columns.")
-            return False
-
-    if viz_type in ["Box Plot", "Violin Plot", "Scatter Plot"]:
-        if len(selected_columns) < 2:
-            st.warning(f"For a {viz_type}, please select at least two columns (x and y).")
-            return False
-
-    if viz_type == "Histogram":
-        if len(selected_columns) < 1:
-            st.warning("For a Histogram, please select at least one column.")
-            return False
-
-    return True
 
 def create_visualisation(dataframe, visualisation_type, selected_columns, custom_options=None):
     """
     Create and display a visualisation based on user selections. Also provides a download button
-    to save the generated visualisation as a PNG image directly from memory.
+    to save the generated visualisation as a PNG image.
 
     Parameters:
         dataframe (pd.DataFrame): The dataset to visualise.
@@ -229,95 +176,94 @@ def create_visualisation(dataframe, visualisation_type, selected_columns, custom
     colour_theme = custom_options.get('color_theme', 'viridis')
     show_legend = custom_options.get('show_legend', True)
 
-    # Ensure the colour theme has enough colour steps
-    colors = px.colors.sequential.get(colour_theme, px.colors.sequential.viridis)
-    # If not enough colours, fallback to the first colour available
-    chosen_color = colors[5] if len(colors) > 5 else colors[-1]
-
-    # Check compatibility before plotting
-    if not is_viz_compatible(dataframe, visualisation_type, selected_columns):
-        return
-
     try:
-        fig = None
+        # Different plotting logic depending on chosen visualisation type:
         if visualisation_type == "Correlation Matrix":
             numeric_cols = [col for col in selected_columns if pd.api.types.is_numeric_dtype(dataframe[col])]
-            corr_values = dataframe[numeric_cols].corr()
-            fig = px.imshow(
-                corr_values,
-                title=title or "Correlation Matrix",
-                color_continuous_scale=colour_theme
-            )
+            if len(numeric_cols) > 1:
+                correlation_values = dataframe[numeric_cols].corr()
+                fig = px.imshow(
+                    correlation_values,
+                    title=title or "Correlation Matrix",
+                    color_continuous_scale=colour_theme
+                )
+                st.plotly_chart(fig, use_container_width=True)
         
         elif visualisation_type == "Box Plot":
-            fig = px.box(
-                dataframe,
-                x=selected_columns[0],
-                y=selected_columns[1],
-                title=title or "Box Plot"
-            )
-            fig.update_traces(marker_color=chosen_color)
-        
-        elif visualisation_type == "Violin Plot":
-            fig = px.violin(
-                dataframe,
-                x=selected_columns[0],
-                y=selected_columns[1],
-                title=title or "Violin Plot"
-            )
-            fig.update_traces(marker_color=chosen_color)
-        
-        elif visualisation_type == "Histogram":
-            fig = px.histogram(
-                dataframe,
-                x=selected_columns[0],
-                title=title or "Histogram"
-            )
-            fig.update_traces(marker_color=chosen_color)
-        
-        elif visualisation_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
-            if visualisation_type == "Line Chart":
-                fig = px.line(
-                    dataframe,
-                    x=selected_columns[0],
-                    y=selected_columns[1:],
-                    title=title or "Line Chart"
-                )
-            elif visualisation_type == "Area Chart":
-                fig = px.area(
-                    dataframe,
-                    x=selected_columns[0],
-                    y=selected_columns[1:],
-                    title=title or "Area Chart"
-                )
-            elif visualisation_type == "Bar Chart":
-                fig = px.bar(
-                    dataframe,
-                    x=selected_columns[0],
-                    y=selected_columns[1:],
-                    title=title or "Bar Chart"
-                )
-            else:  # Scatter Plot
-                fig = px.scatter(
+            if len(selected_columns) >= 2:
+                fig = px.box(
                     dataframe,
                     x=selected_columns[0],
                     y=selected_columns[1],
-                    title=title or "Scatter Plot"
+                    title=title or "Box Plot"
                 )
-            
-            fig.update_traces(marker_color=chosen_color)
-            fig.update_layout(showlegend=show_legend)
+                fig.update_traces(marker_color=px.colors.sequential[colour_theme][5])
+                st.plotly_chart(fig, use_container_width=True)
         
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Download button for the generated visualisation
-            # Using fig.to_image to get bytes directly, avoiding local file writing
-            if st.button("Download Visualisation"):
-                img_bytes = fig.to_image(format="png")
+        elif visualisation_type == "Violin Plot":
+            if len(selected_columns) >= 2:
+                fig = px.violin(
+                    dataframe,
+                    x=selected_columns[0],
+                    y=selected_columns[1],
+                    title=title or "Violin Plot"
+                )
+                fig.update_traces(marker_color=px.colors.sequential[colour_theme][5])
+                st.plotly_chart(fig, use_container_width=True)
+        
+        elif visualisation_type == "Histogram":
+            if selected_columns:
+                fig = px.histogram(
+                    dataframe,
+                    x=selected_columns[0],
+                    title=title or "Histogram"
+                )
+                fig.update_traces(marker_color=px.colors.sequential[colour_theme][5])
+                st.plotly_chart(fig, use_container_width=True)
+        
+        elif visualisation_type in ["Line Chart", "Area Chart", "Bar Chart", "Scatter Plot"]:
+            if len(selected_columns) >= 2:
+                # For time series or relationship plots, the first selected column often acts as X-axis
+                if visualisation_type == "Line Chart":
+                    fig = px.line(
+                        dataframe,
+                        x=selected_columns[0],
+                        y=selected_columns[1:],
+                        title=title or "Line Chart"
+                    )
+                elif visualisation_type == "Area Chart":
+                    fig = px.area(
+                        dataframe,
+                        x=selected_columns[0],
+                        y=selected_columns[1:],
+                        title=title or "Area Chart"
+                    )
+                elif visualisation_type == "Bar Chart":
+                    fig = px.bar(
+                        dataframe,
+                        x=selected_columns[0],
+                        y=selected_columns[1:],
+                        title=title or "Bar Chart"
+                    )
+                else:  # Scatter Plot
+                    fig = px.scatter(
+                        dataframe,
+                        x=selected_columns[0],
+                        y=selected_columns[1],
+                        title=title or "Scatter Plot"
+                    )
+                
+                fig.update_traces(marker_color=px.colors.sequential[colour_theme][5])
+                fig.update_layout(showlegend=show_legend)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # Download button for the generated visualisation
+        if st.button("Download Visualisation"):
+            fig.write_image("visualisation.png")
+            with open("visualisation.png", "rb") as file:
                 st.download_button(
                     label="Download PNG",
-                    data=img_bytes,
+                    data=file,
                     file_name="visualisation.png",
                     mime="image/png"
                 )
@@ -341,65 +287,37 @@ def perform_basic_statistical_analysis(dataframe, selected_columns):
     Example usage:
         perform_basic_statistical_analysis(df, ["age", "height"])
     """
-    if len(selected_columns) < 2:
-        st.info("Please select at least two columns for statistical analysis.")
-        return
-    
-    col1, col2 = selected_columns[:2]
-
-    # Check if dataset is empty
-    if dataframe.empty:
-        st.warning("The dataset is empty, cannot perform statistical analysis.")
-        return
-
-    # If both columns are numeric, show correlation and t-tests
-    if pd.api.types.is_numeric_dtype(dataframe[col1]) and pd.api.types.is_numeric_dtype(dataframe[col2]):
-        correlation_value = dataframe[col1].corr(dataframe[col2])
-        st.write(f"Pearson Correlation between {col1} and {col2}: {correlation_value:.3f}")
+    if len(selected_columns) >= 2:
+        st.subheader("Two-Variable Analysis")
+        col1, col2 = selected_columns[:2]
         
-        # T-test
-        # Ensure both columns have data before performing t-test
-        if dataframe[col1].dropna().empty or dataframe[col2].dropna().empty:
-            st.warning("Insufficient data for t-test after cleaning.")
-        else:
+        # If both columns are numeric, show correlation and t-tests
+        if pd.api.types.is_numeric_dtype(dataframe[col1]) and pd.api.types.is_numeric_dtype(dataframe[col2]):
+            correlation_value = dataframe[col1].corr(dataframe[col2])
+            st.write(f"Pearson Correlation between {col1} and {col2}: {correlation_value:.3f}")
+            
             t_stat, p_value = stats.ttest_ind(dataframe[col1].dropna(), dataframe[col2].dropna())
             st.write(f"Independent T-test p-value: {p_value:.3f}")
-
-        # Normality test (Shapiro-Wilk) - sample data if too large
-        st.write("### Normality Test (Shapiro-Wilk)")
-        for col in [col1, col2]:
-            col_data = dataframe[col].dropna()
-            if len(col_data) > MAX_SHAPIRO_SIZE:
-                # Random sample for normality test
-                col_data = col_data.sample(MAX_SHAPIRO_SIZE, random_state=42)
-                st.write(f"Sampling {MAX_SHAPIRO_SIZE} points from {col} for Shapiro test due to large size.")
-            if col_data.empty:
-                st.write(f"Not enough data in {col} to test for normality.")
-            else:
-                try:
-                    _, p_val = stats.shapiro(col_data)
-                    st.write(f"{col}: p-value = {p_val:.3f}")
-                except Exception:
-                    st.write(f"Could not perform Shapiro-Wilk test on {col}. Possibly too large or invalid data.")
-    
-    # If one or both columns are categorical, run a chi-square test if possible
-    elif pd.api.types.is_categorical_dtype(dataframe[col1]) or pd.api.types.is_categorical_dtype(dataframe[col2]):
-        contingency_table = pd.crosstab(dataframe[col1], dataframe[col2])
-        if contingency_table.empty:
-            st.warning("Not enough data for chi-square test.")
-        else:
+            
+            # Normality test (Shapiro-Wilk)
+            st.write("### Normality Test (Shapiro-Wilk)")
+            for col in [col1, col2]:
+                stat, p_val = stats.shapiro(dataframe[col].dropna())
+                st.write(f"{col}: p-value = {p_val:.3f}")
+        
+        # If one or both columns are categorical, run a chi-square test
+        elif pd.api.types.is_categorical_dtype(dataframe[col1]) or pd.api.types.is_categorical_dtype(dataframe[col2]):
+            contingency_table = pd.crosstab(dataframe[col1], dataframe[col2])
             chi2_stat, p_val, dof, expected = stats.chi2_contingency(contingency_table)
             st.write(f"Chi-square test p-value: {p_val:.3f}")
             st.write("Contingency Table:")
             st.dataframe(contingency_table)
-    else:
-        st.info("Selected columns are neither both numeric nor compatible categorical types for these tests.")
 
 def main():
     """
     The main entry point for the Streamlit application. It sets up the UI layout, handles file uploads,
     applies data cleaning, and sets up different tabs for visualisation and statistical analysis. Users
-    can also export data in various formats, limited to the user-selected columns for visualisation.
+    can also export data in various formats.
 
     Parameters:
         None
@@ -461,10 +379,6 @@ def main():
             # Data cleaning
             df = apply_data_cleaning_options(df)
             
-            if df.empty:
-                st.info("No further analysis can be done as the dataset is empty.")
-                return
-            
             # Data overview section
             with st.expander("Data Overview", expanded=True):
                 st.write("Preview of your data:")
@@ -509,12 +423,9 @@ def main():
             # Basic Statistics Tab
             with tabs[0]:
                 st.header("Basic Statistics")
-                # Show describe only for numeric columns if available
                 if st.session_state.numeric_columns:
                     st.dataframe(df[st.session_state.numeric_columns].describe())
-                else:
-                    st.info("No numeric columns available for basic descriptive statistics.")
-
+            
             # Time Series Tab
             with tabs[1]:
                 st.header("Time Series Analysis")
@@ -522,8 +433,6 @@ def main():
                 selected_time_series_viz = st.selectbox("Select visualisation type", time_series_types, key="time_viz")
                 if st.session_state.selected_columns:
                     create_visualisation(df, selected_time_series_viz, st.session_state.selected_columns, custom_options)
-                else:
-                    st.info("Please select columns in the sidebar to generate a time series visualisation.")
             
             # Relationships Tab
             with tabs[2]:
@@ -532,8 +441,6 @@ def main():
                 selected_relationship_viz = st.selectbox("Select visualisation type", relationship_types, key="rel_viz")
                 if st.session_state.selected_columns:
                     create_visualisation(df, selected_relationship_viz, st.session_state.selected_columns, custom_options)
-                else:
-                    st.info("Please select columns in the sidebar to generate a relationship visualisation.")
             
             # Distributions Tab
             with tabs[3]:
@@ -542,43 +449,32 @@ def main():
                 selected_distribution_viz = st.selectbox("Select visualisation type", distribution_types, key="dist_viz")
                 if st.session_state.selected_columns:
                     create_visualisation(df, selected_distribution_viz, st.session_state.selected_columns, custom_options)
-                else:
-                    st.info("Please select columns in the sidebar to generate a distribution visualisation.")
             
             # Statistical Tests Tab
             with tabs[4]:
                 st.header("Statistical Analysis")
                 if st.session_state.selected_columns:
                     perform_basic_statistical_analysis(df, st.session_state.selected_columns)
-                else:
-                    st.info("Please select columns in the sidebar to run statistical tests.")
             
             # Export options in the sidebar
-            # Export only the data for the user-selected columns
             st.sidebar.header("Export Options")
             export_format = st.sidebar.selectbox("Export Format", ["CSV", "Excel", "JSON", "Parquet"])
-
+            
             if st.sidebar.button("Export Data"):
-                export_cols = st.session_state.selected_columns if st.session_state.selected_columns else df.columns.tolist()
-                export_df = df[export_cols]
-
-                if export_df.empty:
-                    st.sidebar.warning("No data to export. Please select valid columns.")
-                else:
-                    if export_format == "CSV":
-                        csv_data = export_df.to_csv(index=False).encode('utf-8')
-                        st.sidebar.download_button("Download CSV", csv_data, "data_export.csv", "text/csv")
-                    elif export_format == "Excel":
-                        buffer = io.BytesIO()
-                        export_df.to_excel(buffer, index=False)
-                        st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
-                    elif export_format == "JSON":
-                        json_str = export_df.to_json(orient='records')
-                        st.sidebar.download_button("Download JSON", json_str, "data_export.json")
-                    elif export_format == "Parquet":
-                        buffer = io.BytesIO()
-                        export_df.to_parquet(buffer)
-                        st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
+                if export_format == "CSV":
+                    csv_data = df.to_csv(index=False).encode('utf-8')
+                    st.sidebar.download_button("Download CSV", csv_data, "data_export.csv", "text/csv")
+                elif export_format == "Excel":
+                    buffer = io.BytesIO()
+                    df.to_excel(buffer, index=False)
+                    st.sidebar.download_button("Download Excel", buffer.getvalue(), "data_export.xlsx")
+                elif export_format == "JSON":
+                    json_str = df.to_json(orient='records')
+                    st.sidebar.download_button("Download JSON", json_str, "data_export.json")
+                elif export_format == "Parquet":
+                    buffer = io.BytesIO()
+                    df.to_parquet(buffer)
+                    st.sidebar.download_button("Download Parquet", buffer.getvalue(), "data_export.parquet")
         
         except Exception as error:
             st.error(f"Error processing file: {str(error)}")
