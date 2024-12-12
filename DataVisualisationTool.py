@@ -392,8 +392,8 @@ def main():
             st.session_state.theme = 'light'
         
         st.markdown("---")
-        st.markdown("[📚 Documentation](https://github.com/yourusername/data-vis-tool/wiki)")
-        st.markdown("[💡 Report an Issue](https://github.com/yourusername/data-vis-tool/issues)")
+        st.markdown("[📚 Documentation](https://github.com/Besoninja/Data-Visualisation-Tool/wiki)")
+        st.markdown("[💡 Report an Issue](https://github.com/Besoninja/Data-Visualisation-Tool/issues)")
     
     st.title("Enhanced Data Visualisation Tool")
     display_tutorial()
