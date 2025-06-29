@@ -365,6 +365,10 @@ def perform_basic_statistical_analysis(dataframe, selected_columns):
     else:
         st.info("Selected columns do not fit numeric or categorical assumptions for these tests.")
 
+########################################################################################
+### .main ###
+######################################################################################## 
+
 def main():
     """
     The main entry point for the Streamlit application. It sets up the UI layout, handles file uploads,
